@@ -1,0 +1,13 @@
+# Ignore Python cache files
+__pycache__/
+*.pyc
+
+# Ignore IDE-specific files
+.vscode/
+.idea/
+
+# Ignore Streamlit cache
+.streamlit/
+
+# Ignore OS-specific files
+.DS_Store
