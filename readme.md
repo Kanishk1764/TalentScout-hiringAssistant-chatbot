@@ -32,24 +32,17 @@ Follow these steps to set up and run the Hiring Assistant chatbot locally.
 1.  **Clone the Repository:**
 
     ```bash
-    git clone [https://github.com/your-username/hiring-assistant-chatbot.git](https://www.google.com/search?q=https://github.com/your-username/hiring-assistant-chatbot.git)
-    cd hiring-assistant-chatbot
+    git clone [https://github.com/Kanishk1764/TalentScout-hiringAssistant-chatbot.git](https://www.google.com/search?q=https://github.com/Kanishk1764/TalentScout-hiringAssistant-chatbot.git)
+    cd TalentScout-hiringAssistant-chatbot
     ```
 
-2.  **Set Up a Virtual Environment (Optional but recommended):**
-
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows: venv\Scripts\activate
-    ```
-
-3.  **Install Dependencies:**
+2.  **Install Dependencies:**
 
     ```bash
     pip install -r requirements.txt
     ```
 
-4.  **Set Up Environment Variables:**
+3.  **Set Up Environment Variables:**(OPTIONAL) ..didn't used in the current code.
 
     * Create a `.env` file in the root directory.
     * Add your Groq API key:
@@ -58,13 +51,13 @@ Follow these steps to set up and run the Hiring Assistant chatbot locally.
         GROQ_API_KEY=your_groq_api_key_here
         ```
 
-5.  **Run the Application:**
+4.  **Run the Application:**
 
     ```bash
-    streamlit run app.py
+    streamlit run chatbot.py
     ```
 
-6.  **Access the Chatbot:**
+5.  **Access the Chatbot:**
 
     * Open your browser and navigate to `http://localhost:8501`.
 
@@ -82,7 +75,7 @@ Follow these steps to set up and run the Hiring Assistant chatbot locally.
 
 ### End the Conversation:
 
-* You can end the conversation at any time by typing "exit", "quit", or "bye".
+* You can end the conversation at any time by typing "exit", "quit", "goodbye", "end" or "bye".
 
 ### Admin Dashboard:
 
