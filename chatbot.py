@@ -135,10 +135,9 @@ class HiringAssistant:
         else:
             response = response_en
         
-    # Rest of the logic remains the same
+        # Rest of the logic remains the same
         if current_state == "greeting":
             return self.collect_name(user_input, candidate_info, response)
-    # ... (other states)
         elif current_state == "collect_name":
             return self.collect_email(user_input, candidate_info, response)
         elif current_state == "collect_email":
@@ -190,8 +189,14 @@ class HiringAssistant:
                 "candidate_info": candidate_info
             }
         else:
+            # Use LLM to generate a polite response for invalid email
+            prompt = f"""
+            The candidate provided an invalid email: {user_input}.
+            Politely ask them to provide a valid email address.
+            """
+            llm_response = self.model.generate_response([{"role": "user", "content": prompt}])
             return {
-                "message": "I need a valid email address to proceed. Could you please provide it?",
+                "message": llm_response,
                 "new_state": "collect_email",
                 "candidate_info": candidate_info
             }
@@ -206,8 +211,14 @@ class HiringAssistant:
                 "candidate_info": candidate_info
             }
         else:
+            # Use LLM to generate a polite response for invalid phone
+            prompt = f"""
+            The candidate provided an invalid phone number: {user_input}.
+            Politely ask them to provide a valid phone number.
+            """
+            llm_response = self.model.generate_response([{"role": "user", "content": prompt}])
             return {
-                "message": "I need a valid phone number to proceed. Could you please provide it?",
+                "message": llm_response,
                 "new_state": "collect_phone",
                 "candidate_info": candidate_info
             }
@@ -222,8 +233,14 @@ class HiringAssistant:
                 "candidate_info": candidate_info
             }
         else:
+            # Use LLM to generate a polite response for invalid experience
+            prompt = f"""
+            The candidate provided an invalid number of years of experience: {user_input}.
+            Politely ask them to provide a valid number of years.
+            """
+            llm_response = self.model.generate_response([{"role": "user", "content": prompt}])
             return {
-                "message": "I need to know your years of experience. Could you please specify how many years you've been working in the tech industry?",
+                "message": llm_response,
                 "new_state": "collect_experience",
                 "candidate_info": candidate_info
             }
