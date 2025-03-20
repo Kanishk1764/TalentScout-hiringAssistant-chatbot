@@ -34,7 +34,6 @@ class HiringAssistant:
     def __init__(self):
         self.model = GroqModel()
         self.exit_keywords = ["exit", "quit", "bye", "goodbye", "end"]
-        self.required_info = ["name", "email", "phone", "experience", "position", "location", "tech_stack"]
     
     def get_greeting(self):
         greeting = """
@@ -66,129 +65,210 @@ class HiringAssistant:
         return any(keyword in text.lower() for keyword in self.exit_keywords)
     
     def analyze_sentiment(self, text):
+        """
+        Analyze the sentiment of the candidate's input using TextBlob.
+        Returns a sentiment score between -1 (negative) and 1 (positive).
+        """
         analysis = TextBlob(text)
         return analysis.sentiment.polarity
     
+    # Ensure consistent language detection
+    DetectorFactory.seed = 0  # Add this line to make langdetect deterministic
+
     def detect_language(self, text):
+        """
+        Detect the language of the candidate's input using langdetect.
+        Default to English if detection fails or is ambiguous.
+        """
         try:
-            if len(text.strip().split()) >= 3:
+            # Only detect language if the input is long enough
+            if len(text.strip().split()) >= 3:  # Require at least 3 words for reliable detection
                 detected_lang = detect(text)
                 return detected_lang
             else:
-                return "en"
+                return "en"  # Default to English for short inputs
         except Exception as e:
             print(f"Error detecting language: {e}")
-            return "en"
+            return "en"  # Default to English if detection fails
     
     def translate_text(self, text, src_lang, dest_lang="en"):
+        """
+        Translate text from source language to destination language using Google Translate.
+        """
         try:
             translated = GoogleTranslator(source=src_lang, target=dest_lang).translate(text)
             return translated
         except Exception as e:
             print(f"Error translating text: {e}")
-            return text
+            return text  # Return original text if translation fails
     
     def process_input(self, user_input, current_state, candidate_info, asked_questions):
-        # Detect language and translate input to English
+        # Detect the language of the user's input
         src_lang = self.detect_language(user_input)
-        user_input_en = self.translate_text(user_input, src_lang, "en") if src_lang != "en" else user_input
+    
+        # Translate the input to English for processing (if not already in English)
+        if src_lang != "en":
+            user_input_en = self.translate_text(user_input, src_lang, "en")
+        else:
+            user_input_en = user_input
         
-        # Analyze sentiment
+        # Analyze sentiment of the translated input
         sentiment_score = self.analyze_sentiment(user_input_en)
         
-        # Generate a context-aware response
+        # Generate a response based on the current state
         messages = [
             {"role": "system", "content": f"""
             You are a hiring assistant for TalentScout. The current state of the conversation is: {current_state}. 
             The candidate has provided the following information so far: {candidate_info}. 
             Respond appropriately based on the user input: {user_input_en}.
             
-            The sentiment analysis of the candidate's input is: {"positive" if sentiment_score > 0 else "negative" if sentiment_score < 0 else "neutral"}.
+            Additionally, the sentiment analysis of the candidate's input is: {"positive" if sentiment_score > 0 else "negative" if sentiment_score < 0 else "neutral"}.
             Adjust your tone accordingly to be empathetic and supportive if the sentiment is negative, or enthusiastic if the sentiment is positive.
             """},
             {"role": "user", "content": user_input_en}
         ]
         response_en = self.model.generate_response(messages)
         
-        # Translate response back to the candidate's language
-        response = self.translate_text(response_en, "en", src_lang) if src_lang != "en" else response_en
+        # Translate the response back to the candidate's language (if not English)
+        if src_lang != "en":
+            response = self.translate_text(response_en, "en", src_lang)
+        else:
+            response = response_en
         
-        # Extract information from the user input
-        extracted_info = self._extract_info(user_input_en, candidate_info)
-        candidate_info.update(extracted_info)
-        
-        # Determine the next question based on missing information
-        next_question = self._get_next_question(candidate_info)
-        
-        if next_question:
+        # Rest of the logic remains the same
+        if current_state == "greeting":
+            return self.collect_name(user_input, candidate_info, response)
+        elif current_state == "collect_name":
+            return self.collect_email(user_input, candidate_info, response)
+        elif current_state == "collect_email":
+            return self.collect_phone(user_input, candidate_info, response)
+        elif current_state == "collect_phone":
+            return self.collect_experience(user_input, candidate_info, response)
+        elif current_state == "collect_experience":
+            return self.collect_position(user_input, candidate_info, response)
+        elif current_state == "collect_position":
+            return self.collect_location(user_input, candidate_info, response)
+        elif current_state == "collect_location":
+            return self.collect_tech_stack(user_input, candidate_info, response)
+        elif current_state == "collect_tech_stack":
+            return self.generate_tech_questions(user_input, candidate_info, response)
+        elif current_state == "tech_questions":
+            return self.process_tech_answers(user_input, candidate_info, asked_questions, response)
+        elif current_state == "wrap_up":
+            return self.end_conversation(user_input, candidate_info, response)
+        else:
             return {
-                "message": next_question,
-                "new_state": "collect_info",
+                "message": "I'm not sure how to proceed. Let's start over. What's your name?",
+                "new_state": "collect_name",
+                "candidate_info": candidate_info
+            }
+    
+    def collect_name(self, user_input, candidate_info, response):
+        name = self._extract_name(user_input)
+        if name:
+            candidate_info["name"] = name
+            return {
+                "message": response,
+                "new_state": "collect_email",
                 "candidate_info": candidate_info
             }
         else:
-            # All information collected, generate technical questions
-            return self.generate_tech_questions(candidate_info["tech_stack"], candidate_info, response)
+            return {
+                "message": "I didn't catch your name. Could you please tell me your full name?",
+                "new_state": "collect_name",
+                "candidate_info": candidate_info
+            }
     
-    def _extract_info(self, text, candidate_info):
-        extracted_info = {}
-        
-        # Extract name
-        if "name" not in candidate_info:
-            name = self._extract_name(text)
-            if name:
-                extracted_info["name"] = name
-        
-        # Extract email
-        if "email" not in candidate_info:
-            email = self._extract_email(text)
-            if email:
-                extracted_info["email"] = email
-        
-        # Extract phone
-        if "phone" not in candidate_info:
-            phone = self._extract_phone(text)
-            if phone:
-                extracted_info["phone"] = phone
-        
-        # Extract experience
-        if "experience" not in candidate_info:
-            experience = self._extract_experience(text)
-            if experience is not None:
-                extracted_info["experience"] = experience
-        
-        # Extract position
-        if "position" not in candidate_info:
-            position = text.strip() if text.strip() else None
-            if position:
-                extracted_info["position"] = position
-        
-        # Extract location
-        if "location" not in candidate_info:
-            location = text.strip() if text.strip() else None
-            if location:
-                extracted_info["location"] = location
-        
-        # Extract tech stack
-        if "tech_stack" not in candidate_info:
-            tech_stack = text.strip() if text.strip() else None
-            if tech_stack:
-                extracted_info["tech_stack"] = tech_stack
-        
-        return extracted_info
-    
-    def _get_next_question(self, candidate_info):
-        missing_info = [info for info in self.required_info if info not in candidate_info]
-        if missing_info:
-            next_info = missing_info[0]
-            prompt = f"""
-            You are a hiring assistant for TalentScout.
-            The candidate has provided the following information so far: {candidate_info}.
-            Politely ask the candidate for their {next_info.replace('_', ' ')}.
-            """
-            return self.model.generate_response([{"role": "user", "content": prompt}])
+    def collect_email(self, user_input, candidate_info, response):
+        email = self._extract_email(user_input)
+        if email:
+            candidate_info["email"] = email
+            return {
+                "message": response,
+                "new_state": "collect_phone",
+                "candidate_info": candidate_info
+            }
         else:
-            return None
+            # Use LLM to generate a polite response for invalid email
+            prompt = f"""
+            The candidate provided an invalid email: {user_input}.
+            Politely ask them to provide a valid email address.
+            """
+            llm_response = self.model.generate_response([{"role": "user", "content": prompt}])
+            return {
+                "message": llm_response,
+                "new_state": "collect_email",
+                "candidate_info": candidate_info
+            }
+    
+    def collect_phone(self, user_input, candidate_info, response):
+        phone = self._extract_phone(user_input)
+        if phone:
+            candidate_info["phone"] = phone
+            return {
+                "message": response,
+                "new_state": "collect_experience",
+                "candidate_info": candidate_info
+            }
+        else:
+            # Use LLM to generate a polite response for invalid phone
+            prompt = f"""
+            The candidate provided an invalid phone number: {user_input}.
+            Politely ask them to provide a valid phone number.
+            """
+            llm_response = self.model.generate_response([{"role": "user", "content": prompt}])
+            return {
+                "message": llm_response,
+                "new_state": "collect_phone",
+                "candidate_info": candidate_info
+            }
+    
+    def collect_experience(self, user_input, candidate_info, response):
+        experience = self._extract_experience(user_input)
+        if experience is not None:
+            candidate_info["experience"] = experience
+            return {
+                "message": response,
+                "new_state": "collect_position",
+                "candidate_info": candidate_info
+            }
+        else:
+            # Use LLM to generate a polite response for invalid experience
+            prompt = f"""
+            The candidate provided an invalid number of years of experience: {user_input}.
+            Politely ask them to provide a valid number of years.
+            """
+            llm_response = self.model.generate_response([{"role": "user", "content": prompt}])
+            return {
+                "message": llm_response,
+                "new_state": "collect_experience",
+                "candidate_info": candidate_info
+            }
+    
+    def collect_position(self, user_input, candidate_info, response):
+        candidate_info["position"] = user_input.strip()
+        return {
+            "message": response,
+            "new_state": "collect_location",
+            "candidate_info": candidate_info
+        }
+    
+    def collect_location(self, user_input, candidate_info, response):
+        candidate_info["location"] = user_input.strip()
+        return {
+            "message": response,
+            "new_state": "collect_tech_stack",
+            "candidate_info": candidate_info
+        }
+    
+    def collect_tech_stack(self, user_input, candidate_info, response):
+        candidate_info["tech_stack"] = user_input.strip()
+        return {
+            "message": response,
+            "new_state": "tech_questions",
+            "candidate_info": candidate_info,
+            "asked_questions": []
+        }
     
     def generate_tech_questions(self, tech_stack, candidate_info, response):
         messages = [
@@ -214,14 +294,14 @@ class HiringAssistant:
         st.session_state.candidate_database.append(candidate_info)
         
         return {
-            "message": "Thank you for answering the questions! We'll review your responses and get back to you soon.",
+            "message": response,
             "new_state": "wrap_up",
             "candidate_info": candidate_info
         }
     
     def end_conversation(self, user_input, candidate_info, response):
         return {
-            "message": "Thank you for your time! We'll be in touch if there's a suitable match.",
+            "message": response,
             "new_state": "end",
             "candidate_info": candidate_info
         }
@@ -253,6 +333,7 @@ class HiringAssistant:
         if match:
             return int(match.group())
         return None
+
 # Main Streamlit application
 def main():
     st.set_page_config(page_title="TalentScout Hiring Assistant", page_icon="🤖", layout="wide")
