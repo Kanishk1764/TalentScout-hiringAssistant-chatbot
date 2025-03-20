@@ -34,6 +34,7 @@ class HiringAssistant:
     def __init__(self):
         self.model = GroqModel()
         self.exit_keywords = ["exit", "quit", "bye", "goodbye", "end"]
+        self.required_info = ["name", "email", "phone", "experience", "position", "location", "tech_stack"]
     
     def get_greeting(self):
         greeting = """
@@ -112,122 +113,82 @@ class HiringAssistant:
         # Translate response back to the candidate's language
         response = self.translate_text(response_en, "en", src_lang) if src_lang != "en" else response_en
         
-        # Handle conversation flow
-        if current_state == "greeting":
-            return self.collect_name(user_input, candidate_info, response)
-        elif current_state == "collect_name":
-            return self.collect_email(user_input, candidate_info, response)
-        elif current_state == "collect_email":
-            return self.collect_phone(user_input, candidate_info, response)
-        elif current_state == "collect_phone":
-            return self.collect_experience(user_input, candidate_info, response)
-        elif current_state == "collect_experience":
-            return self.collect_position(user_input, candidate_info, response)
-        elif current_state == "collect_position":
-            return self.collect_location(user_input, candidate_info, response)
-        elif current_state == "collect_location":
-            return self.collect_tech_stack(user_input, candidate_info, response)
-        elif current_state == "collect_tech_stack":
-            return self.generate_tech_questions(user_input, candidate_info, response)
-        elif current_state == "tech_questions":
-            return self.process_tech_answers(user_input, candidate_info, asked_questions, response)
-        elif current_state == "wrap_up":
-            return self.end_conversation(user_input, candidate_info, response)
-        else:
+        # Extract information from the user input
+        extracted_info = self._extract_info(user_input_en, candidate_info)
+        candidate_info.update(extracted_info)
+        
+        # Determine the next question based on missing information
+        next_question = self._get_next_question(candidate_info)
+        
+        if next_question:
             return {
-                "message": "I'm not sure how to proceed. Let's start over. What's your name?",
-                "new_state": "collect_name",
-                "candidate_info": candidate_info
-            }
-    
-    def collect_name(self, user_input, candidate_info, response):
-        name = self._extract_name(user_input)
-        if name:
-            candidate_info["name"] = name
-            return {
-                "message": f"Great, {name}! Could you please provide your email address so we can stay in touch?",
-                "new_state": "collect_email",
+                "message": next_question,
+                "new_state": "collect_info",
                 "candidate_info": candidate_info
             }
         else:
-            return {
-                "message": "I didn't catch your name. Could you please tell me your full name?",
-                "new_state": "collect_name",
-                "candidate_info": candidate_info
-            }
+            # All information collected, generate technical questions
+            return self.generate_tech_questions(candidate_info["tech_stack"], candidate_info, response)
     
-    def collect_email(self, user_input, candidate_info, response):
-        email = self._extract_email(user_input)
-        if email:
-            candidate_info["email"] = email
-            return {
-                "message": "Thank you! Could you also share your phone number for quick communication?",
-                "new_state": "collect_phone",
-                "candidate_info": candidate_info
-            }
+    def _extract_info(self, text, candidate_info):
+        extracted_info = {}
+        
+        # Extract name
+        if "name" not in candidate_info:
+            name = self._extract_name(text)
+            if name:
+                extracted_info["name"] = name
+        
+        # Extract email
+        if "email" not in candidate_info:
+            email = self._extract_email(text)
+            if email:
+                extracted_info["email"] = email
+        
+        # Extract phone
+        if "phone" not in candidate_info:
+            phone = self._extract_phone(text)
+            if phone:
+                extracted_info["phone"] = phone
+        
+        # Extract experience
+        if "experience" not in candidate_info:
+            experience = self._extract_experience(text)
+            if experience is not None:
+                extracted_info["experience"] = experience
+        
+        # Extract position
+        if "position" not in candidate_info:
+            position = text.strip() if text.strip() else None
+            if position:
+                extracted_info["position"] = position
+        
+        # Extract location
+        if "location" not in candidate_info:
+            location = text.strip() if text.strip() else None
+            if location:
+                extracted_info["location"] = location
+        
+        # Extract tech stack
+        if "tech_stack" not in candidate_info:
+            tech_stack = text.strip() if text.strip() else None
+            if tech_stack:
+                extracted_info["tech_stack"] = tech_stack
+        
+        return extracted_info
+    
+    def _get_next_question(self, candidate_info):
+        missing_info = [info for info in self.required_info if info not in candidate_info]
+        if missing_info:
+            next_info = missing_info[0]
+            prompt = f"""
+            You are a hiring assistant for TalentScout.
+            The candidate has provided the following information so far: {candidate_info}.
+            Politely ask the candidate for their {next_info.replace('_', ' ')}.
+            """
+            return self.model.generate_response([{"role": "user", "content": prompt}])
         else:
-            return {
-                "message": "I didn't catch a valid email address. Could you please provide it again?",
-                "new_state": "collect_email",
-                "candidate_info": candidate_info
-            }
-    
-    def collect_phone(self, user_input, candidate_info, response):
-        phone = self._extract_phone(user_input)
-        if phone:
-            candidate_info["phone"] = phone
-            return {
-                "message": "Got it! How many years of professional experience do you have in the tech industry?",
-                "new_state": "collect_experience",
-                "candidate_info": candidate_info
-            }
-        else:
-            return {
-                "message": "I didn't catch a valid phone number. Could you please provide it again?",
-                "new_state": "collect_phone",
-                "candidate_info": candidate_info
-            }
-    
-    def collect_experience(self, user_input, candidate_info, response):
-        experience = self._extract_experience(user_input)
-        if experience is not None:
-            candidate_info["experience"] = experience
-            return {
-                "message": "Thanks! What type of position are you looking for? (e.g., Software Engineer, Data Scientist)",
-                "new_state": "collect_position",
-                "candidate_info": candidate_info
-            }
-        else:
-            return {
-                "message": "I didn't catch a valid number of years. Could you please specify your years of experience?",
-                "new_state": "collect_experience",
-                "candidate_info": candidate_info
-            }
-    
-    def collect_position(self, user_input, candidate_info, response):
-        candidate_info["position"] = user_input.strip()
-        return {
-            "message": "Understood! Where are you currently located, or where would you prefer to work?",
-            "new_state": "collect_location",
-            "candidate_info": candidate_info
-        }
-    
-    def collect_location(self, user_input, candidate_info, response):
-        candidate_info["location"] = user_input.strip()
-        return {
-            "message": "Got it! Could you list the technologies, programming languages, or frameworks you're proficient in?",
-            "new_state": "collect_tech_stack",
-            "candidate_info": candidate_info
-        }
-    
-    def collect_tech_stack(self, user_input, candidate_info, response):
-        candidate_info["tech_stack"] = user_input.strip()
-        return {
-            "message": "Thank you! Based on your tech stack, I'll generate a few technical questions for you.",
-            "new_state": "tech_questions",
-            "candidate_info": candidate_info,
-            "asked_questions": []
-        }
+            return None
     
     def generate_tech_questions(self, tech_stack, candidate_info, response):
         messages = [
