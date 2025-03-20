@@ -235,15 +235,15 @@ class HiringAssistant:
         else:
             # Use LLM to generate a polite response for invalid experience
             prompt = f"""
-            The candidate provided an invalid number of years of experience: {user_input}.
-            Politely ask them to provide a valid number of years.
+            The candidate provided an invalid input for years of experience: {user_input}.
+            Politely ask them to provide a valid number of years (e.g., "5 years").
             """
             llm_response = self.model.generate_response([{"role": "user", "content": prompt}])
             return {
                 "message": llm_response,
                 "new_state": "collect_experience",
                 "candidate_info": candidate_info
-            }
+        }
     
     def collect_position(self, user_input, candidate_info, response):
         candidate_info["position"] = user_input.strip()
@@ -254,20 +254,50 @@ class HiringAssistant:
         }
     
     def collect_location(self, user_input, candidate_info, response):
-        candidate_info["location"] = user_input.strip()
-        return {
-            "message": response,
-            "new_state": "collect_tech_stack",
-            "candidate_info": candidate_info
+        # Use LLM to validate the location
+        prompt = f"""
+        The candidate provided the following input for location: {user_input}.
+        Is this a valid location? If not, ask them to provide a valid location (e.g., "New York").
+        """
+        llm_response = self.model.generate_response([{"role": "user", "content": prompt}])
+        
+        # If the LLM confirms it's a valid location, save it
+        if "valid" in llm_response.lower():
+            candidate_info["location"] = user_input.strip()
+            return {
+                "message": response,
+                "new_state": "collect_tech_stack",
+                "candidate_info": candidate_info
+            }
+        else:
+            return {
+                "message": llm_response,
+                "new_state": "collect_location",
+                "candidate_info": candidate_info
         }
     
     def collect_tech_stack(self, user_input, candidate_info, response):
-        candidate_info["tech_stack"] = user_input.strip()
-        return {
-            "message": response,
-            "new_state": "tech_questions",
-            "candidate_info": candidate_info,
-            "asked_questions": []
+        # Use LLM to validate the tech stack
+        prompt = f"""
+        The candidate provided the following input for tech stack: {user_input}.
+        Is this a valid tech stack? If not, ask them to provide a valid tech stack (e.g., "Python, JavaScript, SQL").
+        """
+        llm_response = self.model.generate_response([{"role": "user", "content": prompt}])
+        
+        # If the LLM confirms it's a valid tech stack, save it
+        if "valid" in llm_response.lower():
+            candidate_info["tech_stack"] = user_input.strip()
+            return {
+                "message": response,
+                "new_state": "tech_questions",
+                "candidate_info": candidate_info,
+                "asked_questions": []
+            }
+        else:
+            return {
+                "message": llm_response,
+                "new_state": "collect_tech_stack",
+                "candidate_info": candidate_info
         }
     
     def generate_tech_questions(self, tech_stack, candidate_info, response):
@@ -284,19 +314,34 @@ class HiringAssistant:
         }
     
     def process_tech_answers(self, user_input, candidate_info, asked_questions, response):
-        if not hasattr(candidate_info, "tech_answers"):
-            candidate_info["tech_answers"] = [user_input]
+        # Use LLM to validate the tech answer
+        prompt = f"""
+        The candidate provided the following answer to a technical question: {user_input}.
+        Is this a valid answer? If not, ask them to provide a more detailed or accurate answer.
+        """
+        llm_response = self.model.generate_response([{"role": "user", "content": prompt}])
+        
+        # If the LLM confirms it's a valid answer, save it
+        if "valid" in llm_response.lower():
+            if not hasattr(candidate_info, "tech_answers"):
+                candidate_info["tech_answers"] = [user_input]
+            else:
+                candidate_info["tech_answers"].append(user_input)
+            
+            # Save candidate data to the simulated database
+            candidate_info["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            st.session_state.candidate_database.append(candidate_info)
+            
+            return {
+                "message": response,
+                "new_state": "wrap_up",
+                "candidate_info": candidate_info
+            }
         else:
-            candidate_info["tech_answers"].append(user_input)
-        
-        # Save candidate data to the simulated database
-        candidate_info["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        st.session_state.candidate_database.append(candidate_info)
-        
-        return {
-            "message": response,
-            "new_state": "wrap_up",
-            "candidate_info": candidate_info
+            return {
+                "message": llm_response,
+                "new_state": "tech_questions",
+                "candidate_info": candidate_info
         }
     
     def end_conversation(self, user_input, candidate_info, response):
@@ -328,10 +373,16 @@ class HiringAssistant:
         return None
     
     def _extract_experience(self, text):
+        """
+        Extract years of experience from the user's input.
+        Only accept numbers between 0 and 50 (reasonable range for experience).
+        """
         pattern = r"(\d+)"
         match = re.search(pattern, text)
         if match:
-            return int(match.group())
+            experience = int(match.group())
+            if 0 <= experience <= 50:  # Validate range
+                return experience
         return None
 
 # Main Streamlit application
