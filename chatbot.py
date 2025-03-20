@@ -4,8 +4,8 @@ from groq import Groq
 from datetime import datetime
 import pandas as pd
 from textblob import TextBlob  # For sentiment analysis
+from langdetect import detect, DetectorFactory
 from deep_translator import GoogleTranslator  # For translation
-from langdetect import detect  # For language detection
 
 # Initialize Groq client
 client = Groq(api_key="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")  # Replace with your actual API key
@@ -72,13 +72,21 @@ class HiringAssistant:
         analysis = TextBlob(text)
         return analysis.sentiment.polarity
     
+    # Ensure consistent language detection
+    DetectorFactory.seed = 0  # Add this line to make langdetect deterministic
+
     def detect_language(self, text):
         """
         Detect the language of the candidate's input using langdetect.
+        Default to English if detection fails or is ambiguous.
         """
         try:
-            detected_lang = detect(text)
-            return detected_lang
+            # Only detect language if the input is long enough
+            if len(text.strip().split()) >= 3:  # Require at least 3 words for reliable detection
+                detected_lang = detect(text)
+                return detected_lang
+            else:
+                return "en"  # Default to English for short inputs
         except Exception as e:
             print(f"Error detecting language: {e}")
             return "en"  # Default to English if detection fails
@@ -97,8 +105,8 @@ class HiringAssistant:
     def process_input(self, user_input, current_state, candidate_info, asked_questions):
         # Detect the language of the user's input
         src_lang = self.detect_language(user_input)
-        
-        # Translate the input to English for processing
+    
+        # Translate the input to English for processing (if not already in English)
         if src_lang != "en":
             user_input_en = self.translate_text(user_input, src_lang, "en")
         else:
@@ -121,14 +129,16 @@ class HiringAssistant:
         ]
         response_en = self.model.generate_response(messages)
         
-        # Translate the response back to the candidate's language
+        # Translate the response back to the candidate's language (if not English)
         if src_lang != "en":
             response = self.translate_text(response_en, "en", src_lang)
         else:
             response = response_en
         
+    # Rest of the logic remains the same
         if current_state == "greeting":
             return self.collect_name(user_input, candidate_info, response)
+    # ... (other states)
         elif current_state == "collect_name":
             return self.collect_email(user_input, candidate_info, response)
         elif current_state == "collect_email":
